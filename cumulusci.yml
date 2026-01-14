@@ -157,6 +157,16 @@ tasks:
         - VMQS_Custom_Fields
 
 
+  assign_integrationuser_perms:
+    group: NPC Permissions & Access
+    description: Assigns permissions to the integration user to support deployment of batchCalcJobDefinitions (for Data Processing Engine, etc.)
+    class_path: cumulusci.tasks.salesforce.users.permsets.AssignPermissionSets
+    options:
+      api_names:
+        - FundraisingAccess
+      user_alias: 
+        - integ
+
   # ===========================
   # UI / App Navigation Tweaks
   # ===========================
@@ -424,7 +434,9 @@ flows:
       7:
         task: assign_analytics_perms              
       8:
-        task: assign_additional_npc_perms         
+        task: assign_additional_npc_perms
+      9:
+        task: assign_integrationuser_perms         
       
   # ===========================
   # Org Setup / Dev Flows
@@ -507,10 +519,12 @@ flows:
       1: 
         flow: dev_org
       2:
+        task: assign_integrationuser_perms
+      3:  
         task: deploy_shared_config
-      3:
+      4:
         task: deploy_fundraising_config
-      4: 
-        task: load_fundraising_data
       5: 
+        task: load_fundraising_data
+      6: 
         task: reorder_app_menu_fundraising
