@@ -272,6 +272,13 @@ tasks:
     options:
       path: unpackaged/omni-sprint/
       package_xml: unpackaged/omni-sprint/package.xml
+  
+  deploy_docgen_fundraising:
+    group: OmniStudio
+    description: Deploy DocGen components for fundraising use cases
+    class_path: cumulusci.tasks.salesforce.Deploy
+    options:
+      path: unpackaged/docgen/fundraising/
       
   # ======================================
   # Volunteer Quick Start (VMSQ) Metadata
