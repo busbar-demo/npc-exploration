@@ -76,7 +76,9 @@ tasks:
       api_names:
         - OmniStudioAdmin                
         - OmniStudioExecution            
-        - OmniStudioUser                 
+        - OmniStudioUser
+        - DocGenDesigner
+        - DocGenUser                 
 
   assign_analytics_perms:
     group: NPC Permissions & Access  
@@ -260,6 +262,17 @@ tasks:
       mapping: datasets/philanthropic_research/philanthropic_research_mapping.yml
       sql_path: datasets/philanthropic_research/philanthropic_research_data.sql
 
+
+  # ======================================
+  # OmniStudio/DocGen
+  # ======================================
+  retrieve_omnistudio_components:
+    group: OmniStudio
+    class_path: cumulusci.tasks.salesforce.RetrieveUnpackaged
+    options:
+      path: unpackaged/omni-sprint/
+      package_xml: unpackaged/omni-sprint/package.xml
+      
   # ======================================
   # Volunteer Quick Start (VMSQ) Metadata
   # ======================================
@@ -320,6 +333,13 @@ tasks:
     options:
       path: unpackaged/feature-config/shared/
 
+  install_omnistudio:
+    group: NPC Org Config
+    description: Installs OmniStudio managed package
+    class_path: cumulusci.tasks.salesforce.InstallPackageVersion
+    options:  
+      version: 04tKb000000tAvfIAE
+      version_number: 258.7
 
   deploy_fundraising_config:
     group: NPC Org Config
@@ -448,7 +468,9 @@ flows:
     steps:
       90: 
         flow: assign_all_npc_perms
-      91: 
+      91:
+        task: install_omnistudio
+      92: 
         task: reorder_app_menu    
 
   load_all_datasets:
@@ -518,13 +540,11 @@ flows:
     steps:
       1: 
         flow: dev_org
-      2:
-        task: assign_integrationuser_perms
-      3:  
+      2:  
         task: deploy_shared_config
-      4:
+      3:
         task: deploy_fundraising_config
-      5: 
+      4: 
         task: load_fundraising_data
-      6: 
+      5: 
         task: reorder_app_menu_fundraising

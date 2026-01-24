@@ -5,6 +5,15 @@
         <name>ActionLauncherItemDef</name>
     </types>
     <types>
+        <members>Nonprofit_Aggregate_Benefit_Assignment_and_Benefit_Disbursement</members>
+        <members>Nonprofit_Aggregate_Program_Enrollment</members>
+        <members>Nonprofit_OutreachSummary</members>
+        <members>NPC_Aggregate_Benefit_Assignment_and_Benefit_Disbursement</members>
+        <members>NPC_Aggregate_Program_Enrollment</members>
+        <members>NPC_OutreachSummary</members>
+        <name>BatchCalcJobDefinition</name>
+    </types>
+    <types>
         <members>CaseManagement</members>
         <name>CustomApplication</name>
     </types>

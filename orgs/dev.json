@@ -12,6 +12,8 @@
     "DataProcessingEngine",
     "DecisionTable",
     "DocumentChecklist",
+    "DocGen",
+    "DocGenDesigner",
     "DocGenInd",
     "EnableSetPasswordInApi",
     "Explainability",
@@ -38,6 +40,9 @@
     "chatterSettings": {
       "enableChatter": true
     },
+    "emailAdministrationSettings": {
+      "enableEnhancedEmailEnabled": true
+    },
     "enhancedNotesSettings": {
       "enableEnhancedNotes": true
     },
@@ -51,6 +56,7 @@
       "enableCaseReferralPref": true,
       "enableDiscoveryFrameworkMetadata": true,
       "enableFundraising": true,
+      "enableGiftEntryGrid": true,
       "enableGrantmaking": true,
       "enableGroupMembershipPref": true,
       "enableIndustriesAssessment": true,  
