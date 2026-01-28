@@ -475,8 +475,6 @@ flows:
     steps:
       90: 
         flow: assign_all_npc_perms
-      91:
-        task: install_omnistudio
       92: 
         task: reorder_app_menu    
 
@@ -499,7 +497,7 @@ flows:
         task: load_philanthropic_research_data
 
   # ===========================
-  # Volunteer Quick Start Flows
+  # Org Setup Flows
   # ===========================
 
   deploy_volunteer_quick_start:
@@ -555,3 +553,17 @@ flows:
         task: load_fundraising_data
       5: 
         task: reorder_app_menu_fundraising
+
+  grantmaking_org:
+    group: Org Setup
+    steps:
+      1: 
+        flow: dev_org
+      2:
+        task: deploy_shared_config
+      3:
+        task: deploy_grantmaking_config
+      4: 
+        task: load_grantmaking_data
+      5: 
+        task: reorder_app_menu_grantmaking

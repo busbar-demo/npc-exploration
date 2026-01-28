@@ -18,6 +18,7 @@
         <name>CustomApplication</name>
     </types>
     <types>
+        <members>Assessment_Record_Page</members>
         <members>Benefit_Record_Page</members>
         <members>Benefit_Schedule_Record_Page</members>
         <members>Benefit_Session_Record_Page</members>
@@ -27,6 +28,10 @@
         <members>Case_Record_Page</members>
         <members>Client_Account_View</members>
         <members>Client_Case</members>
+        <members>Indicator_Performance_Period_Record_Page</members>
+        <members>Interaction_Summary_Record_Page</members>
+        <members>Program_Enrollment_Record_Page</members>
+        <members>Program_Home_Page</members>
         <members>Program_Record_Page</members>
         <members>Referral_Record_Page</members>
         <name>FlexiPage</name>

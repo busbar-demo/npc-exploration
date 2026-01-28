@@ -25,7 +25,6 @@
     "MarketingUser",
     "NonprofitCloudCaseManagementUser",
     "OmniStudioDesigner",
-    "OmnistudioMetadata",
     "OmniStudioRuntime",
     "OutcomeManagement",
     "PersonAccounts",
@@ -47,6 +46,9 @@
     "enhancedNotesSettings": {
       "enableEnhancedNotes": true
     },
+    "OmniStudioSettings": {
+      "enableOmniStudioMetadata": true
+    },
     "opportunitySettings": {
       "enableOpportunityFieldHistoryTracking": true
     },
@@ -55,12 +57,15 @@
       "enableBenefitManagementPreference": true,
       "enableCarePlansPreference": true,
       "enableCaseReferralPref": true,
+      "enableCompliantDataSharingForInteraction": true,
+      "enableCompliantDataSharingForInteractionSummary": true,
       "enableDiscoveryFrameworkMetadata": true,
       "enableFundraising": true,
       "enableGiftEntryGrid": true,
       "enableGrantmaking": true,
       "enableGroupMembershipPref": true,
       "enableIndustriesAssessment": true,  
+      "enableEnhancedUIForISPref": true,
       "enableInteractionSummaryPref": true,
       "enableTimelinePref": true,
       "enableOutcomes": true,

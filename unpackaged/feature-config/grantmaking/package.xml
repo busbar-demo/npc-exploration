@@ -1,8 +1,44 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
     <types>
+        <members>Application_Decision_Record_Page</members>
+        <members>Application_Form_Record_Page</members>
+        <members>Application_Review_Record_Page</members>
+        <members>Budget_Record_Page</members>
+        <members>Funding_Award_Record_Page</members>
+        <members>Funding_Award_Requirement_Record_Page</members>
+        <members>Funding_Award_Requirement_Section_Record_Page</members>
+        <members>Funding_Disbursement_Record_Page</members>
+        <members>Funding_Opportunity_Record_Page</members>
+        <members>Individual_Application_Record_Page</members>
+        <members>Individual_Application_Task_Record_Page</members>
+        <name>FlexiPage</name>
+    </types>
+    <types>
+        <members>FundingAward.Create_Disbursement_Requirement</members>
+        <members>FundingAward.Create_Recurring_Disbursements</members>
+        <members>FundingAward.Create_Recurring_Requirements</members>
+        <members>FundingOpportunity.New_Application</members>
+        <members>FundingOpportunity.New_Funding_Award</members>
+        <members>IndividualApplication.Assign_Reviewers</members>
+        <members>IndividualApplication.Submit</members>
+        <name>QuickAction</name>
+    </types>
+    <types>
+        <members>Assign_Reviews_in_Batch_Final</members>
+        <members>CreateDisbursementRequirementsFinal</members>
+        <members>CreateRecurringFundingAwardRequirementsFinal</members>
+        <members>CreateRecurringFundingDisbursementsFinal</members>
+        <members>Grantmaking_Update_Application</members>
+        <name>Flow</name>
+    </types>
+    <types>
         <members>Budget_ARC</members>
         <name>RelationshipGraphDefinition</name>
+    </types>
+    <types>
+        <members>Award_Details</members>
+        <name>TimelineObjectDefinition</name>
     </types>
     <types>
         <members>Funding_Awards_with_Disbursements</members>
