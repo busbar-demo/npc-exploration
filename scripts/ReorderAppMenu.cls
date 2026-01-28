@@ -11,6 +11,7 @@ private static String PROGRAM_MANAGEMENT = 'ProgramManagementConsole';
 private static String VOLUNTEER_MANAGEMENT = 'VolunteerManagement';
 private static String VOLUNTEER_MANAGEMENT_QUICK_START = 'Volunteer_Management_Quick_Start';
 private static String GRANTMAKING = 'Grantmaking';
+private static String OMNISTUDIO = 'Vlocity_Digital_Studio';
 private static String OUTCOMES_MANAGEMENT = 'OutcomeManagementConsole';
 private static String PHILANTHROPIC_RESEARCH = 'PhilanthropicResearch';
 private static String PHILANTHROPY_AND_PARTNERSHIPS = 'PhilanthropyAndPartnerships';
@@ -23,6 +24,7 @@ private static List<String> DEFAULT_PRIORITY_APPS = new List<String>{
     VOLUNTEER_MANAGEMENT,
     FUNDRAISING_OPERATIONS,
     GRANTMAKING,
+    OMNISTUDIO, 
     FUNDRAISING_STRATEGY,
     DONOR_ENGAGEMENT,
     PHILANTHROPIC_RESEARCH,
@@ -39,7 +41,8 @@ public static void applyVolunteerAppOrder() {
         VOLUNTEER_MANAGEMENT_QUICK_START,
         PROGRAM_MANAGEMENT,
         OUTCOMES_MANAGEMENT,
-        DONOR_ENGAGEMENT
+        DONOR_ENGAGEMENT,
+        OMNISTUDIO
     };
     applyOrgAppOrder(volunteerPriorityApps);
 }
@@ -51,7 +54,8 @@ public static void applyProgramManagementAppOrder() {
         OUTCOMES_MANAGEMENT,
         VOLUNTEER_MANAGEMENT,
         PHILANTHROPY_AND_PARTNERSHIPS,
-        DONOR_ENGAGEMENT
+        DONOR_ENGAGEMENT,
+        OMNISTUDIO
     };
     applyOrgAppOrder(programsPriorityApps);
 }
@@ -63,7 +67,8 @@ public static void applyFundraisingAppOrder() {
         DONOR_ENGAGEMENT,
         PHILANTHROPY_AND_PARTNERSHIPS,
         PHILANTHROPIC_RESEARCH,
-        OUTCOMES_MANAGEMENT
+        OUTCOMES_MANAGEMENT,
+        OMNISTUDIO
     };
     applyOrgAppOrder(fundraisingPriorityApps);
 }
@@ -73,7 +78,8 @@ public static void applyGrantmakingAppOrder() {
         GRANTMAKING,
         OUTCOMES_MANAGEMENT,
         PHILANTHROPIC_RESEARCH,
-        PHILANTHROPY_AND_PARTNERSHIPS
+        PHILANTHROPY_AND_PARTNERSHIPS,
+        OMNISTUDIO
     };
     applyOrgAppOrder(grantmakingPriorityApps);
 }

@@ -12,6 +12,8 @@
     "DataProcessingEngine",
     "DecisionTable",
     "DocumentChecklist",
+    "DocGen",
+    "DocGenDesigner",
     "DocGenInd",
     "EnableSetPasswordInApi",
     "Explainability",
@@ -38,8 +40,14 @@
     "chatterSettings": {
       "enableChatter": true
     },
+    "emailAdministrationSettings": {
+      "enableEnhancedEmailEnabled": true
+    },
     "enhancedNotesSettings": {
       "enableEnhancedNotes": true
+    },
+    "OmniStudioSettings": {
+      "enableOmniStudioMetadata": true
     },
     "opportunitySettings": {
       "enableOpportunityFieldHistoryTracking": true
@@ -49,11 +57,15 @@
       "enableBenefitManagementPreference": true,
       "enableCarePlansPreference": true,
       "enableCaseReferralPref": true,
+      "enableCompliantDataSharingForInteraction": true,
+      "enableCompliantDataSharingForInteractionSummary": true,
       "enableDiscoveryFrameworkMetadata": true,
       "enableFundraising": true,
+      "enableGiftEntryGrid": true,
       "enableGrantmaking": true,
       "enableGroupMembershipPref": true,
       "enableIndustriesAssessment": true,  
+      "enableEnhancedUIForISPref": true,
       "enableInteractionSummaryPref": true,
       "enableTimelinePref": true,
       "enableOutcomes": true,
