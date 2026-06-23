@@ -48,6 +48,10 @@ jobs:
       SF_INSTANCE_URL: ${{ vars.SF_INSTANCE_URL }}
       SF_ECA_CLIENT_ID: ${{ vars.SF_ECA_CLIENT_ID }}
       TOKEN_HANDLER: GitHubTokenExchangeHandler
+      # Apex REST URLs are namespaced in a managed install (the default), e.g.
+      # /services/apexrest/busbar/monitors. A source-deployed (unmanaged) dev org
+      # has no prefix — set the SF_NAMESPACE variable to `none` there.
+      SF_NAMESPACE: ${{ vars.SF_NAMESPACE || 'busbar' }}
     steps:
       - name: Install Salesforce CLI
         run: npm install --global @salesforce/cli >/dev/null 2>&1
@@ -100,11 +104,12 @@ jobs:
           DEPLOY_ID: ${{ steps.deploy.outputs.deploy_id }}
         run: |
           set -euo pipefail
+          case "$SF_NAMESPACE" in none | "") pfx="" ;; *) pfx="$SF_NAMESPACE/" ;; esac
           body="$(jq -n --arg eid "$DEPLOY_ID" --arg rid "$GITHUB_RUN_ID" \
             '{jobType:"METADATA_DEPLOY", externalId:$eid, sink:"GITHUB_GATE", sinkRef:{run_id:$rid}}')"
           code="$(curl -sS -o resp.json -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-            -d "$body" "$INSTANCE/services/apexrest/busbar/monitors")"
+            -d "$body" "$INSTANCE/services/apexrest/${pfx}monitors")"
           echo "monitor kickoff HTTP $code: $(cat resp.json)"
           [ "$code" = "200" ]
 
