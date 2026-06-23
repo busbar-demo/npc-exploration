@@ -1,0 +1,117 @@
+# Busbar deploy gate — ONE GitHub Actions workflow where one job starts a
+# Salesforce metadata deploy and the NEXT job waits (burning ZERO billable
+# Actions minutes) until the org reports the deploy finished, then is released.
+#
+# How it works
+# ------------
+#   • Job `deploy` runs in the ungated `salesforce-deploy` environment. It
+#     exchanges the GitHub OIDC token for a short-lived Salesforce session
+#     (RFC 8693 — no stored Salesforce secret), starts an async metadata
+#     deploy, and registers a GITHUB_GATE async-job monitor keyed on this
+#     workflow run id.
+#   • Job `post-deploy` targets the `salesforce-prod` environment, which has a
+#     custom deployment protection rule powered by the Busbar GitHub App. The
+#     job sits in the `Waiting` state on NO runner. When the monitored deploy
+#     reaches a terminal state, the org approves (or rejects) the gate via the
+#     App's deployment_protection_rule callback and the job resumes.
+#
+# One-time prerequisites
+# ----------------------
+#   • `salesforce-deploy` environment vars: SF_INSTANCE_URL + SF_ECA_CLIENT_ID
+#     (both non-secret: the instance URL is public DNS, the ECA client_id is the
+#     public token-exchange routing id).
+#   • `salesforce-prod` environment: the Busbar GitHub App enabled as a custom
+#     deployment protection rule.
+#   • An org-side trust rule admitting this repo + workflow + the
+#     `salesforce-deploy` environment (`sf busbar trust rule create`).
+#
+# The workflow FILE name is load-bearing: the trust rule pins the workflow
+# basename (`busbar-deploy-gate`), so keep this file at
+# .github/workflows/busbar-deploy-gate.yml.
+name: busbar-deploy-gate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # mint a GitHub OIDC token for the exchange
+  contents: read
+
+jobs:
+  deploy:
+    name: Start SF deploy + arm the gate
+    runs-on: ubuntu-latest
+    environment: salesforce-deploy
+    env:
+      SF_INSTANCE_URL: ${{ vars.SF_INSTANCE_URL }}
+      SF_ECA_CLIENT_ID: ${{ vars.SF_ECA_CLIENT_ID }}
+      TOKEN_HANDLER: GitHubTokenExchangeHandler
+    steps:
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli >/dev/null 2>&1
+
+      - name: Exchange GitHub OIDC for a Salesforce access token
+        id: auth
+        run: |
+          set -euo pipefail
+          aud_enc="$(jq -rn --arg a "$SF_INSTANCE_URL" '$a|@uri')"
+          oidc="$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$aud_enc" | jq -r '.value')"
+          resp="$(curl -sS -X POST "$SF_INSTANCE_URL/services/oauth2/token" \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode "client_id=$SF_ECA_CLIENT_ID" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:jwt' \
+            --data-urlencode "subject_token=$oidc" \
+            --data-urlencode "token_handler=$TOKEN_HANDLER")"
+          token="$(echo "$resp" | jq -r '.access_token // empty')"
+          inst="$(echo "$resp" | jq -r '.instance_url // empty')"
+          if [ -z "$token" ]; then echo "::error::token exchange failed: $resp"; exit 1; fi
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+          echo "instance=$inst" >> "$GITHUB_OUTPUT"
+
+      - name: Start an async Salesforce metadata deploy
+        id: deploy
+        env:
+          SFDX_ACCESS_TOKEN: ${{ steps.auth.outputs.token }}
+          INSTANCE: ${{ steps.auth.outputs.instance }}
+        run: |
+          set -euo pipefail
+          sf org login access-token --instance-url "$INSTANCE" --alias sf-runtime --no-prompt
+          mkdir -p force-app/main/default/labels
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<CustomLabels xmlns="http://soap.sforce.com/2006/04/metadata">' \
+            '  <labels><fullName>BusbarGateE2E</fullName><language>en_US</language><protected>false</protected><shortDescription>Busbar deploy-gate e2e marker</shortDescription><value>busbar-deploy-gate</value></labels>' \
+            '</CustomLabels>' > force-app/main/default/labels/CustomLabels.labels-meta.xml
+          printf '%s\n' '{"packageDirectories":[{"path":"force-app","default":true}],"sourceApiVersion":"62.0"}' > sfdx-project.json
+          id="$(sf project deploy start --source-dir force-app --async --target-org sf-runtime --json | jq -r '.result.id')"
+          if [ -z "$id" ] || [ "$id" = "null" ]; then echo "::error::no deploy id returned"; exit 1; fi
+          echo "deploy_id=$id" >> "$GITHUB_OUTPUT"
+          echo "Started async deploy $id"
+
+      - name: Arm the gate (register a GITHUB_GATE monitor on this run)
+        env:
+          TOKEN: ${{ steps.auth.outputs.token }}
+          INSTANCE: ${{ steps.auth.outputs.instance }}
+          DEPLOY_ID: ${{ steps.deploy.outputs.deploy_id }}
+        run: |
+          set -euo pipefail
+          body="$(jq -n --arg eid "$DEPLOY_ID" --arg rid "$GITHUB_RUN_ID" \
+            '{jobType:"METADATA_DEPLOY", externalId:$eid, sink:"GITHUB_GATE", sinkRef:{run_id:$rid}}')"
+          code="$(curl -sS -o resp.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d "$body" "$INSTANCE/services/apexrest/busbar/monitors")"
+          echo "monitor kickoff HTTP $code: $(cat resp.json)"
+          [ "$code" = "200" ]
+
+  post-deploy:
+    name: Gated on the org (Waiting → released when the deploy completes)
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: salesforce-prod
+    steps:
+      - run: echo "✅ The org approved the gate after the Salesforce deploy completed — this job waited with 0 minutes burned, then resumed."
