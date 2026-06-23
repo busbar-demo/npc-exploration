@@ -1,33 +1,36 @@
-# Busbar deploy gate — ONE GitHub Actions workflow where one job starts a
-# Salesforce metadata deploy and the NEXT job waits (burning ZERO billable
-# Actions minutes) until the org reports the deploy finished, then is released.
+# Busbar deploy gate — ONE GitHub Actions workflow where one job starts a real
+# Salesforce metadata deploy and the NEXT job waits — burning ZERO billable
+# Actions minutes — until the org reports the deploy finished, then reports the
+# full deploy result.
 #
-# How it works
-# ------------
-#   • Job `deploy` runs in the ungated `salesforce-deploy` environment. It
-#     exchanges the GitHub OIDC token for a short-lived Salesforce session
-#     (RFC 8693 — no stored Salesforce secret), starts an async metadata
-#     deploy, and registers a GITHUB_GATE async-job monitor keyed on this
-#     workflow run id.
-#   • Job `post-deploy` targets the `salesforce-prod` environment, which has a
-#     custom deployment protection rule powered by the Busbar GitHub App. The
-#     job sits in the `Waiting` state on NO runner. When the monitored deploy
-#     reaches a terminal state, the org approves (or rejects) the gate via the
-#     App's deployment_protection_rule callback and the job resumes.
+# What it demonstrates
+# --------------------
+#   • Job `deploy` (ungated env `salesforce-deploy`): exchanges the GitHub OIDC
+#     token for a short-lived Salesforce session (RFC 8693 — no stored secret),
+#     starts an ASYNC deploy of a real OSS app (Salesforce's dreamhouse-lwc,
+#     ~90 components), registers a GITHUB_GATE monitor keyed on this run, and
+#     EXITS. Its runner is released immediately — it does NOT poll.
+#   • Between the two jobs the org polls the deploy SERVER-SIDE. No GitHub runner
+#     is active. Job `post-deploy` sits in `Waiting` on no runner.
+#   • When the deploy reaches a terminal state, the org approves the gate via the
+#     Busbar App's deployment_protection_rule callback and `post-deploy` resumes.
+#   • `post-deploy` then PROVES no runner was active during the deploy window
+#     (jobs-API created→started gap), re-auths, fetches the FULL deploy report,
+#     and writes status + components + tests to the log, the step summary, and an
+#     uploaded artifact.
 #
-# One-time prerequisites
-# ----------------------
-#   • `salesforce-deploy` environment vars: SF_INSTANCE_URL + SF_ECA_CLIENT_ID
-#     (both non-secret: the instance URL is public DNS, the ECA client_id is the
-#     public token-exchange routing id).
-#   • `salesforce-prod` environment: the Busbar GitHub App enabled as a custom
-#     deployment protection rule.
-#   • An org-side trust rule admitting this repo + workflow + the
-#     `salesforce-deploy` environment (`sf busbar trust rule create`).
+# One-time prerequisites — see ./README.md. In short:
+#   • Two org trust rules (one per environment below), the token-exchange handler,
+#     the OIDC provider registry record, and the BusbarECAAccess permset.
+#   • GitHub env `salesforce-deploy`: vars SF_INSTANCE_URL + SF_ECA_CLIENT_ID
+#     (non-secret) — and SF_NAMESPACE=none ONLY for a source-deployed dev org.
+#     These are threaded to post-deploy via job outputs (env vars are env-scoped),
+#     so `salesforce-prod` needs no variables of its own.
+#   • GitHub env `salesforce-prod`: the Busbar App enabled as a custom deployment
+#     protection rule.
 #
-# The workflow FILE name is load-bearing: the trust rule pins the workflow
-# basename (`busbar-deploy-gate`), so keep this file at
-# .github/workflows/busbar-deploy-gate.yml.
+# The workflow FILE name is load-bearing: the trust rules pin the basename
+# (`busbar-deploy-gate`). Keep it at .github/workflows/busbar-deploy-gate.yml.
 name: busbar-deploy-gate
 
 on:
@@ -44,6 +47,11 @@ jobs:
     name: Start SF deploy + arm the gate
     runs-on: ubuntu-latest
     environment: salesforce-deploy
+    # Thread the deploy id + the (env-scoped) connection values to post-deploy.
+    outputs:
+      deploy_id: ${{ steps.deploy.outputs.deploy_id }}
+      instance_url: ${{ vars.SF_INSTANCE_URL }}
+      eca_client_id: ${{ vars.SF_ECA_CLIENT_ID }}
     env:
       SF_INSTANCE_URL: ${{ vars.SF_INSTANCE_URL }}
       SF_ECA_CLIENT_ID: ${{ vars.SF_ECA_CLIENT_ID }}
@@ -77,7 +85,7 @@ jobs:
           echo "token=$token" >> "$GITHUB_OUTPUT"
           echo "instance=$inst" >> "$GITHUB_OUTPUT"
 
-      - name: Start an async Salesforce metadata deploy
+      - name: Start an async Salesforce metadata deploy (dreamhouse-lwc)
         id: deploy
         env:
           SFDX_ACCESS_TOKEN: ${{ steps.auth.outputs.token }}
@@ -85,17 +93,17 @@ jobs:
         run: |
           set -euo pipefail
           sf org login access-token --instance-url "$INSTANCE" --alias sf-runtime --no-prompt
-          mkdir -p force-app/main/default/labels
-          printf '%s\n' \
-            '<?xml version="1.0" encoding="UTF-8"?>' \
-            '<CustomLabels xmlns="http://soap.sforce.com/2006/04/metadata">' \
-            '  <labels><fullName>BusbarGateE2E</fullName><language>en_US</language><protected>false</protected><shortDescription>Busbar deploy-gate e2e marker</shortDescription><value>busbar-deploy-gate</value></labels>' \
-            '</CustomLabels>' > force-app/main/default/labels/CustomLabels.labels-meta.xml
-          printf '%s\n' '{"packageDirectories":[{"path":"force-app","default":true}],"sourceApiVersion":"62.0"}' > sfdx-project.json
-          id="$(sf project deploy start --source-dir force-app --async --target-org sf-runtime --json | jq -r '.result.id')"
+          # Deploy a real, substantial OSS app — Salesforce's dreamhouse-lwc sample
+          # (~90 components: custom objects, Apex, ~20 LWCs, layouts, an app) — so
+          # the deploy takes genuine server-side time. NoTestRun keeps completion
+          # clean + predictable (we are demonstrating the gate, not the app's tests).
+          git clone --depth 1 https://github.com/trailheadapps/dreamhouse-lwc.git app
+          cd app
+          id="$(sf project deploy start --source-dir force-app --target-org sf-runtime \
+            --test-level NoTestRun --ignore-conflicts --async --json | jq -r '.result.id')"
           if [ -z "$id" ] || [ "$id" = "null" ]; then echo "::error::no deploy id returned"; exit 1; fi
           echo "deploy_id=$id" >> "$GITHUB_OUTPUT"
-          echo "Started async deploy $id"
+          echo "Started async dreamhouse-lwc deploy $id"
 
       - name: Arm the gate (register a GITHUB_GATE monitor on this run)
         env:
@@ -114,9 +122,212 @@ jobs:
           [ "$code" = "200" ]
 
   post-deploy:
-    name: Gated on the org (Waiting → released when the deploy completes)
+    name: Gated on the org → report the completed deploy
     needs: deploy
     runs-on: ubuntu-latest
     environment: salesforce-prod
+    # Per-job permissions OVERRIDE the workflow default, so id-token must be
+    # re-declared here; actions:read is needed to read this run's jobs + timing.
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    env:
+      # Env vars are scoped to salesforce-deploy, so post-deploy reads the
+      # connection values from the deploy job's outputs (not vars.*).
+      SF_INSTANCE_URL: ${{ needs.deploy.outputs.instance_url }}
+      SF_ECA_CLIENT_ID: ${{ needs.deploy.outputs.eca_client_id }}
+      TOKEN_HANDLER: GitHubTokenExchangeHandler
+      DEPLOY_ID: ${{ needs.deploy.outputs.deploy_id }}
     steps:
-      - run: echo "✅ The org approved the gate after the Salesforce deploy completed — this job waited with 0 minutes burned, then resumed."
+      - name: Confirm release
+        run: echo "✅ Released by the org after the Salesforce deploy reached a terminal state."
+
+      - name: Prove zero runner minutes during the deploy gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # The deploy job is completed; this (post-deploy) job is in_progress.
+          # The window [deploy.completed_at, this.started_at] is the deploy + gate
+          # time during which NO runner was assigned to this job. (On a public repo
+          # billable is always 0 — the jobs-API gap is the repo-type-independent proof.)
+          jobs="$(gh api "/repos/$OWNER_REPO/actions/runs/$RUN_ID/jobs")"
+          timing="$(gh api "/repos/$OWNER_REPO/actions/runs/$RUN_ID/timing" 2>/dev/null || echo '{}')"
+          jq -rn --argjson j "$jobs" --argjson t "$timing" '
+            ($j.jobs) as $all
+            | ([ $all[] | select(.completed_at != null) ] | sort_by(.completed_at) | last) as $deploy
+            | ([ $all[] | select(.status != "completed") ] | sort_by(.started_at) | last) as $this
+            | ($deploy.completed_at | fromdateiso8601) as $dc
+            | ($this.started_at | fromdateiso8601) as $ts
+            | ($this.created_at | fromdateiso8601) as $tcr
+            | ([ $all[] | select(.started_at != null)
+                 | (if .completed_at then (.completed_at | fromdateiso8601) else now end) - (.started_at | fromdateiso8601) ]
+               | add | floor) as $active
+            | ($ts - $dc | floor) as $gate
+            | ($ts - $tcr | floor) as $wait
+            | (($t.run_duration_ms // 0) / 1000 | floor) as $wall
+            | (([ $t.billable[]?.total_ms ] | add) // 0) as $bill
+            | "## 🔌 Busbar deploy gate — runner accounting\n\n| metric | value |\n|---|---|\n| Wall-clock run duration | \($wall) s |\n| Runner-active seconds (Σ started→completed across jobs) | \($active) s |\n| **Deploy-gate window with NO runner active** (deploy done → next job started) | **\($gate) s** |\n| Next job queued + gated (created→started) | \($wait) s |\n| Billable runner ms (timing API; 0 on public repos) | \($bill) ms |\n\n> **The gate held `\($this.name)` for ~\($gate)s while the org ran the deploy server-side — ZERO GitHub runner minutes burned during that window.**\n> The job existed from \($deploy.completed_at) (when the deploy job ended) but no runner was assigned until \($this.started_at) — the org, not a runner, did the waiting."
+          ' | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli >/dev/null 2>&1
+
+      - name: Re-exchange GitHub OIDC (now carrying environment=salesforce-prod)
+        id: auth
+        run: |
+          set -euo pipefail
+          aud_enc="$(jq -rn --arg a "$SF_INSTANCE_URL" '$a|@uri')"
+          oidc="$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$aud_enc" | jq -r '.value')"
+          resp="$(curl -sS -X POST "$SF_INSTANCE_URL/services/oauth2/token" \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode "client_id=$SF_ECA_CLIENT_ID" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:jwt' \
+            --data-urlencode "subject_token=$oidc" \
+            --data-urlencode "token_handler=$TOKEN_HANDLER")"
+          token="$(echo "$resp" | jq -r '.access_token // empty')"
+          inst="$(echo "$resp" | jq -r '.instance_url // empty')"
+          if [ -z "$token" ]; then echo "::error::token exchange failed: $resp"; exit 1; fi
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+          echo "instance=$inst" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to the org
+        env:
+          INSTANCE: ${{ steps.auth.outputs.instance }}
+          SFDX_ACCESS_TOKEN: ${{ steps.auth.outputs.token }}
+        run: sf org login access-token --instance-url "$INSTANCE" --alias sf-runtime --no-prompt
+
+      - name: Fetch + report the full deploy result
+        run: |
+          set -uo pipefail
+
+          # 1) Fetch full report; trap exit code (report exits non-zero on Failed status).
+          set +e
+          sf project deploy report --job-id "$DEPLOY_ID" --target-org sf-runtime --json > deploy-report.json 2> report.err
+          rc=$?
+          set -e
+          if ! jq -e . deploy-report.json >/dev/null 2>&1; then
+            echo "::error::deploy report returned no parseable JSON (rc=$rc): $(cat report.err)"
+            cat deploy-report.json || true
+            exit 1
+          fi
+
+          # 2) Extract scalars (numberFiles/zipSize are JSON strings; counts are numbers).
+          R='.result'
+          status=$(jq -r "$R.status // \"Unknown\"" deploy-report.json)
+          success=$(jq -r "$R.success // false" deploy-report.json)
+          did=$(jq -r "$R.id // \"$DEPLOY_ID\"" deploy-report.json)
+          dep=$(jq -r "$R.numberComponentsDeployed // 0" deploy-report.json)
+          tot=$(jq -r "$R.numberComponentsTotal // 0" deploy-report.json)
+          cerr=$(jq -r "$R.numberComponentErrors // 0" deploy-report.json)
+          tdone=$(jq -r "$R.numberTestsCompleted // 0" deploy-report.json)
+          ttot=$(jq -r "$R.numberTestsTotal // 0" deploy-report.json)
+          terr=$(jq -r "$R.numberTestErrors // 0" deploy-report.json)
+          checkonly=$(jq -r "$R.checkOnly // false" deploy-report.json)
+          nfiles=$(jq -r "($R.numberFiles // 0) | tostring" deploy-report.json)
+          zsize=$(jq -r "($R.zipSize // 0) | tostring" deploy-report.json)
+          started=$(jq -r "$R.startDate // \"\"" deploy-report.json)
+          completed=$(jq -r "$R.completedDate // \"\"" deploy-report.json)
+
+          # 3) Elapsed seconds (GNU date on ubuntu-latest; tolerant of empty/fractional).
+          elapsed="n/a"
+          if [ -n "$started" ] && [ -n "$completed" ]; then
+            s=$(date -d "$started" +%s 2>/dev/null || echo 0)
+            e=$(date -d "$completed" +%s 2>/dev/null || echo 0)
+            [ "$e" -ge "$s" ] && elapsed="$((e - s))s"
+          fi
+
+          # 4) Status emoji.
+          case "$status" in
+            Succeeded)        emoji="✅";;
+            SucceededPartial) emoji="⚠️";;
+            Failed)           emoji="❌";;
+            Canceled)         emoji="🛑";;
+            *)                emoji="❓";;
+          esac
+
+          # 5) Echo key facts to the job log.
+          echo "::group::Salesforce deploy report"
+          echo "deploy_id=$did status=$status success=$success checkOnly=$checkonly"
+          echo "components: $dep/$tot deployed, errors=$cerr | tests: $tdone/$ttot run, errors=$terr"
+          echo "files=$nfiles zipSize=${zsize}B elapsed=$elapsed"
+          echo "started=$started completed=$completed"
+          echo "::endgroup::"
+
+          # 6) Build the markdown summary (also uploaded as an artifact).
+          {
+            echo "## $emoji Salesforce deploy \`$status\`"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Deploy ID | \`$did\` |"
+            echo "| Status | $emoji \`$status\` (success=\`$success\`) |"
+            echo "| Validate-only | \`$checkonly\` |"
+            echo "| Components | **$dep / $tot** deployed · errors **$cerr** |"
+            echo "| Tests | **$tdone / $ttot** run · errors **$terr** |"
+            echo "| Files / zip | $nfiles files · ${zsize} B |"
+            echo "| Elapsed | $elapsed |"
+            echo "| Window | \`$started\` → \`$completed\` |"
+            echo ""
+
+            fcount=$(jq -r '(.result.details.componentFailures // []) | length' deploy-report.json)
+            if [ "$fcount" -gt 0 ]; then
+              echo "### ❌ Component failures ($fcount)"
+              echo ""
+              echo "| Type | Component | Problem | Line:Col |"
+              echo "| --- | --- | --- | --- |"
+              jq -r '(.result.details.componentFailures // [])[:25][]
+                     | "| \(.componentType // "-") | `\(.fullName // .fileName // "-")` | \((.problem // "-") | gsub("[\r\n|]"; " ")) | \(.lineNumber // "-"):\(.columnNumber // "-") |"' \
+                 deploy-report.json
+              echo ""
+            fi
+
+            tcount=$(jq -r '(.result.details.runTestResult.failures // []) | length' deploy-report.json)
+            if [ "$tcount" -gt 0 ]; then
+              echo "### ❌ Apex test failures ($tcount)"
+              echo ""
+              echo "| Class.method | Message |"
+              echo "| --- | --- |"
+              jq -r '(.result.details.runTestResult.failures // [])[:25][]
+                     | "| `\(.name // "-").\(.methodName // "-")` | \((.message // "-") | gsub("[\r\n|]"; " ")) |"' \
+                 deploy-report.json
+              echo ""
+            fi
+
+            echo "<details><summary>Deployed components ($dep)</summary>"
+            echo ""
+            echo "| Type | Component |"
+            echo "| --- | --- |"
+            jq -r '(.result.details.componentSuccesses // [])[]
+                   | select((.componentType // "") != "" and .fullName != "package.xml")
+                   | "| \(.componentType) | `\(.fullName)` |"' \
+               deploy-report.json
+            echo ""
+            echo "</details>"
+          } > deploy-summary.md
+
+          # 7) Publish to the GitHub step summary.
+          cat deploy-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+          # 8) Fail the job if the deploy did not succeed.
+          if [ "$status" != "Succeeded" ] && [ "$status" != "SucceededPartial" ]; then
+            echo "::error::Salesforce deploy ended in status '$status'"
+            exit 1
+          fi
+
+      - name: Upload deploy report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sf-deploy-report-${{ github.run_id }}
+          path: |
+            deploy-report.json
+            deploy-summary.md
+          if-no-files-found: warn
+          retention-days: 14
