@@ -137,7 +137,9 @@ jobs:
       checks: read
     steps:
       - name: Confirm release
-        run: echo "✅ Released by the org after the Salesforce deploy reached a terminal state — no SF CLI, no re-auth: the org already pushed the result to the commit's Check Run."
+        run: |
+          echo "Released by the org after the Salesforce deploy reached a terminal state."
+          echo "No SF CLI and no re-auth here — the org already pushed the result to the commit's Check Run."
 
       - name: Prove zero runner minutes during the deploy gate
         env:
